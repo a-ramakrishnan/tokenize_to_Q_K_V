@@ -2,7 +2,7 @@
 # File 1 in the series on Building LLMs from scratch
 # Lots of pranams to Sebastian Raschka
 
-# This is a tokenizer only for text files.
+# This is a tokenizer only for text files. (Doesn't handle BOS, EOS or PAD)
 # Look at the Byte Pair Tokenizer file if you want to handle PDF documents.
 #
 # Dataset -> Book of Wonders downloaded from Project Gutenberg
