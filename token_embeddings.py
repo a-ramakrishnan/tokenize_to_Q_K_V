@@ -124,6 +124,7 @@ def _spread(n):
 # We want to use the token IDs from this tokenizer and not the weights
 tokenizer = tiktoken.get_encoding("gpt2")
 ids = tokenizer.encode("The luggage that the exhausted tourists forgot to retrieve from the carousel after their flight landed in Rome was lost.")
+ids = tokenizer.encode("Cats that scare mice chase birds, but mice scare elephants while cats don't.")
 print(ids)
 print(tokenizer.decode(ids))
 print("Length of input Ids", len(ids))
@@ -152,10 +153,10 @@ print(f"ids[1] is {ids[1]} and word is {tokenizer.decode([ids[1]])}")
 vector = model.wte.weight[token_id]
 print(vector.shape)
 print("\n Actual Embeddings")
-print(vector)
+#print(vector)
 
 linear_weights = torch.nn.Linear(vocab_size, embedding_training_dimensions)
-print("Linear Layer", linear_weights.weight)
+#print("Linear Layer", linear_weights.weight)
 print(linear_weights.weight.shape)
 W = linear_weights.weight        # shape (3, 22)
 b = linear_weights.bias          # shape (3,)
