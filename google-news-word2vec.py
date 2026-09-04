@@ -11,18 +11,21 @@ word_vectors = model
 print(word_vectors['dog'].shape)
 
 print(word_vectors.most_similar(positive=['king', 'woman'], negative=['man'], topn = 5))
+print(word_vectors.most_similar(positive=['Vehicles', 'Pollution'], negative=['Petrol'], topn = 5))
+#print(word_vectors.most_similar(positive=['Mumbai', 'roads'], negative=['vehicles'], topn = 5))
 
 print(word_vectors.similarity('dog', 'cat'))
 print(word_vectors.similarity('Bengaluru', 'Mumbai'))
+print(word_vectors.similarity('Shanghai', 'London'))
 print(word_vectors.similarity('Bus', 'Book'))
 
-print(word_vectors.most_similar("city", topn=5))
+print(word_vectors.most_similar("city", topn=10))
 
 word1 = 'king'
-word2 = 'queen'
+word2 = 'monarch'
 
 word3 = 'Bengaluru'
-word4 = 'river'
+word4 = 'Avengers'
 
 diff1 = model[word1] - model[word2]
 diff3 = model[word3] - model[word4]

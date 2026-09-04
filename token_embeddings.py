@@ -10,13 +10,16 @@
 
 # For now, we will only create the embedding layer matrix
 
+from operator import pos
+
 import torch
 import tiktoken
 from transformers import GPT2Model
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-matplotlib.use("Agg")
+from input_for_training import createDataLoader
+#matplotlib.use("Agg")
 
 def visualize_linear_layer(layer, x, save_path=None, show=True):
     """
@@ -123,8 +126,9 @@ def _spread(n):
 # Using the token set of GPT2
 # We want to use the token IDs from this tokenizer and not the weights
 tokenizer = tiktoken.get_encoding("gpt2")
-ids = tokenizer.encode("The luggage that the exhausted tourists forgot to retrieve from the carousel after their flight landed in Rome was lost.")
+#ids = tokenizer.encode("The luggage that the exhausted tourists forgot to retrieve from the carousel after their flight landed in Rome was lost.")
 ids = tokenizer.encode("Cats that scare mice chase birds, but mice scare elephants while cats don't.")
+#ids = tokenizer.encode("Cats hate dogs but love Naman")
 print(ids)
 print(tokenizer.decode(ids))
 print("Length of input Ids", len(ids))
@@ -144,8 +148,9 @@ print(embedding_layer.num_embeddings)
 print(embedding_layer.embedding_dim)
 
 print(embedding_layer(torch.tensor([2])))
-print(embedding_layer(torch.tensor([10])))
+#print(embedding_layer(torch.tensor([10])))
 
+"""
 print("Let us see some actual embeddings from the GPT2 Model")
 model = GPT2Model.from_pretrained("gpt2")
 token_id = ids[1]
@@ -153,10 +158,11 @@ print(f"ids[1] is {ids[1]} and word is {tokenizer.decode([ids[1]])}")
 vector = model.wte.weight[token_id]
 print(vector.shape)
 print("\n Actual Embeddings")
-#print(vector)
+print(vector)
+
 
 linear_weights = torch.nn.Linear(vocab_size, embedding_training_dimensions)
-#print("Linear Layer", linear_weights.weight)
+print("Linear Layer", linear_weights.weight)
 print(linear_weights.weight.shape)
 W = linear_weights.weight        # shape (3, 22)
 b = linear_weights.bias          # shape (3,)
@@ -180,7 +186,7 @@ with torch.no_grad():
     linear_weights.weight.copy_(embedding_layer.weight.T)
     # (3, vocab_size) = (vocab_size, 3).T
 # one-hot vector for whichever token you want to visualize
-token_id = 5   # <- change this to any token id in [0, vocab_size)
+token_id = 2   # <- change this to any token id in [0, vocab_size)
 x = torch.zeros(vocab_size)
 x[token_id] = 1.0
 
@@ -189,3 +195,47 @@ y_minus_bias = torch.tensor(y) - linear_weights.bias.detach()
 print("y - bias                     =", y_minus_bias)
 print("embedding_layer.weight[token_id] =", embedding_layer.weight[token_id])
 print("Match (within float tolerance)?", torch.allclose(y_minus_bias, embedding_layer.weight[token_id], atol=1e-4))
+"""
+
+print("Adding Positional embeddings")
+print("Moving to GPT 2 sizes")
+vocabulary_size = 50257
+embedding_training_dimensions_with_pos = 4
+
+with_pos_embedding_layer = torch.nn.Embedding(vocabulary_size, embedding_training_dimensions_with_pos)
+print("\nEmbedding Layer Weights")
+#print(with_pos_embedding_layer.weight[:3])
+print(with_pos_embedding_layer.weight.shape)
+print(with_pos_embedding_layer.num_embeddings)
+print(with_pos_embedding_layer.embedding_dim)
+
+if __name__ == "__main__":
+    # Load the text
+    with open('book_of_wonders.txt', "r", encoding="utf-8") as f:
+        _text = f.read()
+
+    max_length = 4
+    dataloader = createDataLoader(_text, batch_size=6, max_length=max_length, stride=max_length, shuffle=False)
+
+    data = iter(dataloader)
+    inputs, targets = next(data)
+
+    print("Token IDs: \n", inputs)
+    print("\nInputs shape: ", inputs.shape)
+
+    print(f"Starting Conversion of the tokens into {embedding_training_dimensions_with_pos} dimension vectors")
+    vector_embeddings = with_pos_embedding_layer(inputs)
+    print("Shape of the Vector embeddings" , vector_embeddings.shape)
+
+    context_length = max_length
+    pos_embedding_layer = torch.nn.Embedding(context_length, embedding_training_dimensions_with_pos)
+
+    pos_embeddings = pos_embedding_layer(torch.arange(max_length))
+    print('Shape of Positional Embeddings Matrix:', pos_embeddings.shape)
+
+    final_vector_embeddings = vector_embeddings + pos_embeddings
+
+    print("Shape of Final Vector Embeddings", final_vector_embeddings.shape)
+    print("Initial Vector Embedding\n", vector_embeddings[1])
+    print("Initial Positional Embedding\n", pos_embeddings)
+    print("Final Embedding\n", final_vector_embeddings[1])
