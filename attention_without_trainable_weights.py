@@ -143,6 +143,9 @@ def parse_args():
     parser.add_argument("sentence", type=str, help="The sentence to tokenize into words")
     parser.add_argument("--embedding-dim", type=int, default=3, help="Size of each embedding vector (default: 3)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility (optional)")
+    parser.add_argument("--causal", action="store_true",
+                         help="Also show causal (autoregressive) masked attention, where each "
+                              "word can only attend to itself and earlier words")
     return parser.parse_args()
 
 
@@ -327,6 +330,34 @@ def compute_attention_entropy(input_words, attention_weights):
     print("Close to 100% means attention is nearly uniform (no learned preference yet).")
     return entropies
 
+def apply_causal_mask(attention_scores):
+    """
+    Apply a causal (autoregressive) mask: each word can only attend to
+    itself and words that came BEFORE it in the sentence, never words
+    that come after. This is the core mechanism GPT-style models use so
+    a word can't "cheat" by looking ahead at future tokens.
+
+    attention_scores : (n, n) tensor of raw (pre-softmax) scores
+    Returns the same shape, with the upper triangle (future positions)
+    set to -inf so softmax turns them into exactly 0.
+    """
+    seq_len = attention_scores.shape[0]
+    mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
+    return attention_scores.masked_fill(mask, float('-inf'))
+
+def print_top_k_attended(input_words, attention_weights, k=3):
+    """
+    Print, in plain English, which words each word attends to most --
+    turns the raw attention matrix into human-readable sentences.
+    """
+    weights_np = attention_weights.detach().numpy()
+    print(f"\nTop-{k} attended words per word:")
+    for i, word in enumerate(input_words):
+        row = weights_np[i]
+        top_indices = row.argsort()[::-1][:k]
+        parts = [f"{input_words[idx]} ({row[idx]:.2f})" for idx in top_indices]
+        print(f'  "{word}" attends most to: ' + ", ".join(parts))
+
 if __name__ == "__main__":
     args = parse_args()
     input_words = re.findall(r"\b[\w']+\b", args.sentence)
@@ -371,7 +402,16 @@ if __name__ == "__main__":
     checkpoint("Good with Attention Weights - For 1 word/token - Softmax")
 
     print("\nComplete Attention Scores")
-    attention_scores = inputs @ inputs.T
+    # Q (Query), K (Key), V (Value): every attention mechanism computes
+    # scores as Q @ K.T and applies the resulting weights to V. Right now,
+    # with no trainable projection matrices yet, all three are literally
+    # the same tensor -- this naming just builds the vocabulary bridge
+    # toward the next file, where separate W_q, W_k, W_v will make them
+    # genuinely different tensors.
+    Q = inputs   # Query
+    K = inputs   # Key
+    V = inputs   # Value
+    attention_scores = Q @ K.T
     print("Shape of Attention Scores Matrix", attention_scores.shape)
     print("Attention Score Matrix\n", attention_scores)
     checkpoint("Good with Attention Scores - Simple")
@@ -385,9 +425,23 @@ if __name__ == "__main__":
 
     plot_attention_heatmap(input_words, attention_weights)
     compute_attention_entropy(input_words, attention_weights)
+    print_top_k_attended(input_words, attention_weights, k=3)
+
+    if args.causal:
+        print("\n=== Causal (Autoregressive) Masked Attention ===")
+        print("Each word can now only attend to itself and words that came BEFORE it.")
+        causal_scores = apply_causal_mask(attention_scores)
+        causal_weights = torch.softmax(causal_scores, dim=1)
+        print("Causal Attention Weights Matrix\n", causal_weights)
+        print("Sum of the rows independently -> ", causal_weights.sum(dim=1))
+        plot_attention_heatmap(input_words, causal_weights)
+        compute_attention_entropy(input_words, causal_weights)
+        print_top_k_attended(input_words, causal_weights, k=3)
+        checkpoint("Good with Causal Masking")
+    checkpoint("Good with Attention Heatmap and Entropy")
 
     print("\nNow onto the Context Vectors")
-    context_vector = attention_weights @ inputs
+    context_vector = attention_weights @ V
     print("Context Vector \n", context_vector)
     print(f"Context vector of {input_words[1]} is ", context_vector[1])
     checkpoint("Good with Context Vector - Single word")
@@ -398,7 +452,8 @@ if __name__ == "__main__":
     print("Append Context Vector to Inputs")
     inputs = torch.cat((inputs, context_vector), dim=0)
     print("Updated Input Tensor\n", inputs)
-    print("Updated Words list\n", input_words)
+    updated_words = input_words + [f"{w} (ctx)" for w in input_words]
+    print("Updated Words list\n", updated_words)
     checkpoint("Good with Context Vectors")
 
     print("\nComparing Original Embeddings vs Context Vectors for every word")
@@ -426,3 +481,4 @@ if __name__ == "__main__":
     print(f"Context vectors are {(original_inputs.std()/context_vector.std()).item():.1f}x tighter than the originals")
 
     plot_original_vs_context(input_words, original_inputs, context_vector)
+    plt.close('all')
