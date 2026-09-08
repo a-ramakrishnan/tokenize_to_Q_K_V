@@ -267,6 +267,66 @@ def plotting_fn(input_words, inputs, figsize=(12, 10), save_path=None, show=True
 
     return check
 
+def plot_attention_heatmap(input_words, attention_weights, figsize=(9, 8), save_path=None, show=True):
+    """
+    Visualize the attention weights matrix as a heatmap, with words
+    labeled on both axes and each cell annotated with its value.
+    """
+    weights_np = attention_weights.detach().numpy()
+
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(weights_np, cmap='viridis', vmin=0, vmax=weights_np.max())
+
+    ax.set_xticks(range(len(input_words)))
+    ax.set_yticks(range(len(input_words)))
+    ax.set_xticklabels(input_words, rotation=45, ha='right')
+    ax.set_yticklabels(input_words)
+    ax.set_xlabel('Key (attended to)')
+    ax.set_ylabel('Query (attending from)')
+    ax.set_title('Attention Weights Heatmap')
+
+    for i in range(len(input_words)):
+        for j in range(len(input_words)):
+            value = weights_np[i, j]
+            text_color = 'white' if value < weights_np.max() * 0.6 else 'black'
+            ax.text(j, i, f"{value:.2f}", ha='center', va='center', color=text_color, fontsize=8)
+
+    fig.colorbar(im, ax=ax, label='Attention Weight')
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+def compute_attention_entropy(input_words, attention_weights):
+    """
+    Compute and print the Shannon entropy of each word's attention
+    distribution. Max possible entropy = log(n) means completely uniform
+    (no preference at all); lower entropy means attention is more focused
+    on specific words.
+    """
+    weights_np = attention_weights.detach().numpy()
+    n = weights_np.shape[1]
+    max_entropy = np.log(n)
+
+    print(f"\nAttention Entropy per word (max possible = {max_entropy:.4f}, i.e. completely uniform):")
+    print(f"{'Word':<12}{'Entropy':<12}{'% of Max':<10}")
+    print("-" * 34)
+
+    entropies = []
+    for word, row in zip(input_words, weights_np):
+        entropy = -np.sum(row * np.log(row + 1e-12))
+        entropies.append(entropy)
+        pct = 100 * entropy / max_entropy
+        print(f"{word:<12}{entropy:<12.4f}{pct:<10.1f}")
+
+    avg_entropy = np.mean(entropies)
+    print(f"\nAverage entropy: {avg_entropy:.4f} ({100 * avg_entropy / max_entropy:.1f}% of max)")
+    print("Close to 100% means attention is nearly uniform (no learned preference yet).")
+    return entropies
+
 if __name__ == "__main__":
     args = parse_args()
     input_words = re.findall(r"\b[\w']+\b", args.sentence)
@@ -322,6 +382,9 @@ if __name__ == "__main__":
     print("Attention Weights Matrix\n", attention_weights)
     print("Sum of the rows independently -> ", attention_weights.sum(dim=1))
     checkpoint("Good with Attention Weights - Softmax")
+
+    plot_attention_heatmap(input_words, attention_weights)
+    compute_attention_entropy(input_words, attention_weights)
 
     print("\nNow onto the Context Vectors")
     context_vector = attention_weights @ inputs
