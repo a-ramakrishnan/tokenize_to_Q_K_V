@@ -22,25 +22,30 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORD2VEC_LOCAL_PATH = os.path.join(SCRIPT_DIR, "word2vec-google-news-300.kv")
 
-# print("Sentence Used \n")
-# print("______________\n")
-# print("Cats scare mice while mice terrify elephants.")
-# print("______________\n")
+'''
+print("Sentence Used \n")
+print("______________\n")
+print("The dog chased the cat because it was very hungry.")
+print("______________\n")
 
-# input_words = ["Cats", "scare", 'mice', 'while', 'mice', 'terrify', 'elephants']
+input_words = ["the", "dog", "chased", 'the', 'cat', 'because', 'it', 'was', 'very', 'hungry']
 
-# inputs = torch.tensor([
-#     [0.45, 0.58, 0.66],
-#     [0.77, 0.11, 0.12],
-#     [0.4, 0.62, 0.70],
-#     [0.05, 0.15, 0.72],
-#     [0.4, 0.62, 0.70],
-#     [0.80, 0.12, 0.2],
-#     [0.65, 0.78, 0.83]
-# ])
-#
+inputs = torch.tensor([
+    [0.10, 0.10, 0.10], #The
+    [0.85, 0.75, 0.65], #dog
+    [0.70, 0.65, 0.75], #chased
+    [0.10, 0.10, 0.10], #the
+    [0.78, 0.70, 0.62], #cat
+    [0.30, 0.25, 0.35], #because
+    [0.72, 0.68, 0.60], #it
+    [0.25, 0.20, 0.30], #was
+    [0.35, 0.40, 0.30], #very
+    [0.65, 0.75, 0.55]  #hungry
+])
+'''
 OUTPUT_DIM = 3
 
+'''
 def generate_semantic_embeddings(input_words, model=None, local_path=WORD2VEC_LOCAL_PATH):
     """
     Generate embeddings where semantically similar words end up close
@@ -121,6 +126,93 @@ def generate_semantic_embeddings(input_words, model=None, local_path=WORD2VEC_LO
     )
 
     return torch.tensor(scaled, dtype=torch.float32)
+'''
+
+def generate_semantic_embeddings(input_words, model=None, local_path=WORD2VEC_LOCAL_PATH, output_dim=None):
+    """
+    Generate embeddings where semantically similar words end up close
+    together, using a pretrained word2vec model rather than random noise.
+
+    input_words : list of words
+    model       : an already-loaded gensim KeyedVectors model (optional --
+                  pass this in if calling repeatedly, to avoid reloading
+                  the ~1.6GB model each time)
+    local_path  : path to a locally saved KeyedVectors file. If it exists,
+                  loads from disk (fast, no network). If not, downloads
+                  once via gensim's downloader and saves it here for next
+                  time -- so the ~1.6GB download only ever happens once.
+                  Defaults to a path next to this script file, so it's
+                  found consistently regardless of the working directory.
+    output_dim  : how many dimensions to reduce the embeddings to. Defaults
+                  to this module's OUTPUT_DIM (3, for the 3D plots below).
+                  Callers needing a different dimension -- e.g. File 7's
+                  Q/K/V projections wanting more room to work with -- can
+                  override this without affecting File 6's own default.
+
+    Returns a torch.Tensor of shape (len(input_words), output_dim), scaled
+    to [0, 1] per dimension.
+    """
+    output_dim = OUTPUT_DIM if output_dim is None else output_dim
+
+    if model is None:
+        if os.path.exists(local_path):
+            from gensim.models import KeyedVectors
+            print(f"Loading word2vec model from local cache: {local_path}")
+            model = KeyedVectors.load(local_path)
+        else:
+            import gensim.downloader as api
+            print("Local cache not found. Downloading word2vec-google-news-300 "
+                  "(one-time, ~1.6GB)...")
+            model = api.load("word2vec-google-news-300")
+            print(f"Saving to {local_path} so future runs skip the download...")
+            model.save(local_path)
+
+    vectors = []
+    missing = []
+    for word in input_words:
+        key = word.lower()
+        if key in model:
+            vectors.append(model[key])
+        else:
+            missing.append(word)
+            vectors.append(None)
+
+    if missing:
+        print(f"Warning: {missing} not found in the pretrained vocabulary; "
+              f"using the average of the other words' vectors as a fallback.")
+        known = np.array([v for v in vectors if v is not None])
+        fallback = known.mean(axis=0) if len(known) > 0 else np.zeros(model.vector_size)
+        vectors = [v if v is not None else fallback for v in vectors]
+
+    vectors = np.array(vectors, dtype=float)
+    n_words = vectors.shape[0]
+
+    # PCA via SVD. The number of usable components is capped by
+    # min(n_words - 1, vector_size) -- with very few words, that can be
+    # LESS than 3, so we explicitly pad with zero columns afterward to
+    # guarantee exactly 3 output dimensions no matter what.
+    centered = vectors - vectors.mean(axis=0)
+    U, S, Vt = np.linalg.svd(centered, full_matrices=False)
+    n_components = min(output_dim, Vt.shape[0])
+    reduced = centered @ Vt[:n_components].T
+
+    if n_components < output_dim:
+        pad_width = output_dim - n_components
+        reduced = np.pad(reduced, ((0, 0), (0, pad_width)), mode='constant')
+
+    # Scale into [0, 1] per dimension, matching the plots' axis limits.
+    # Guard against a zero range (e.g. a padded all-zero column, or a
+    # single repeated word) so we don't divide by zero.
+    mins = reduced.min(axis=0)
+    maxs = reduced.max(axis=0)
+    ranges = np.where(maxs - mins > 1e-8, maxs - mins, 1.0)
+    scaled = (reduced - mins) / ranges
+
+    assert scaled.shape == (n_words, output_dim), (
+        f"Expected shape ({n_words}, {output_dim}), got {scaled.shape}"
+    )
+
+    return torch.tensor(scaled, dtype=torch.float32)
 
 def checkpoint(label=""):
     """
@@ -147,7 +239,6 @@ def parse_args():
                          help="Also show causal (autoregressive) masked attention, where each "
                               "word can only attend to itself and earlier words")
     return parser.parse_args()
-
 
 def plot_original_vs_context(input_words, original_inputs, context_vector, figsize=(12, 10)):
     assert len(input_words) == len(original_inputs) == len(context_vector), (
