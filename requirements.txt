@@ -11,3 +11,4 @@ pandas >= 2.2.1            # ch06
 psutil >= 5.9.5            # ch07; already installed automatically as dependency of torch
 gensim==4.4.0
 transformers >= 4.40.0     # pretrained GPT-2 model + embeddings (e.g. GPT2Model.from_pretrained)
+pypdf
