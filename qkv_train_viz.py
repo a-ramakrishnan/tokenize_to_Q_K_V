@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Ramakrishnan A
+# File 8-A in the series on Building LLMs from scratch
 """
 qkv_train_viz.py — watch Q, K and V change while a tiny attention head trains.
 

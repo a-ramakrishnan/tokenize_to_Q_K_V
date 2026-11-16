@@ -1,6 +1,6 @@
 # Ramakrishnan A
-# How to create the inputs for training
-# File 4 in the Build LLMs from scratch series
+# File 3 (formerly File 4) in the series on Building LLMs from scratch
+# How to create the inputs for training (Sliding Window Dataset & DataLoader)
 # Lots of pranams to Sebastian Raschka
 
 # Step 1 -> Splitting into tokens & making the vocabulary

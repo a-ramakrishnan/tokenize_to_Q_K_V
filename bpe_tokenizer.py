@@ -2,8 +2,8 @@
 # File 2 in the series on Building LLMs from scratch
 # Lots of pranams to Sebastian Raschka
 
-# This is a BPE tokenizer only for text files. (Doesn't handle BOS, EOS or PAD)
-# PDF documents are handled in the next file.
+# This is a BPE tokenizer using GPT-2's tiktoken vocabulary.
+# PDF documents are handled in token_embeddings_with_pdf.py (File 5-B).
 
 # Dataset -> Book of Wonders downloaded from Project Gutenberg
 

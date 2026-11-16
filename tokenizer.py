@@ -2,8 +2,9 @@
 # File 1 in the series on Building LLMs from scratch
 # Lots of pranams to Sebastian Raschka
 
-# This is a tokenizer only for text files. (Doesn't handle BOS, EOS or PAD)
-# Look at the Byte Pair Tokenizer file if you want to handle PDF documents.
+# This is a regex-based tokenizer for text files. (Handles <|unk|> and <|endoftext|>)
+# See bpe_tokenizer.py (File 2) for Byte-Pair Encoding (BPE), and
+# token_embeddings_with_pdf.py (File 5-B) for PDF document ingestion.
 #
 # Dataset -> Book of Wonders downloaded from Project Gutenberg
 

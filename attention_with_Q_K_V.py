@@ -1,5 +1,5 @@
 # Ramakrishnan A
-# File 7 in the series on Building LLMs from scratch
+# File 7-A in the series on Building LLMs from scratch
 # Lots of pranams to Sebastian Raschka
 
 # Self-attention with trainable Query, Key, and Value weight matrices.

@@ -1,5 +1,6 @@
 # Ramakrishnan A
-# File 7 in the series on Building LLMs from scratch
+# File 7-B in the series on Building LLMs from scratch
+# Self-attention with trainable Q, K, V weights + 2x2 Matplotlib visual summary
 # Lots of pranams to Sebastian Raschka
 
 import torch.nn as nn

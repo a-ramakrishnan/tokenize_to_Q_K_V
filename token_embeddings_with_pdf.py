@@ -1,5 +1,5 @@
 # Ramakrishnan A
-# File 5-A in the series on Building LLMs from scratch
+# File 5-B in the series on Building LLMs from scratch
 # Lots of pranams to Sebastian Raschka
 
 # Embedding layer Weight Matrix
@@ -18,12 +18,12 @@
 # embedding steps as before.
 #
 # How to run:
-#   python embeddings_with_pdf_importer.py                      -> asks PDF or txt, then opens a file picker
-#   python embeddings_with_pdf_importer.py --pdf                -> file picker straight away
-#   python embeddings_with_pdf_importer.py --pdf mybook.pdf     -> use this PDF
-#   python embeddings_with_pdf_importer.py --pdf mybook.pdf --pages 1-10
-#   python embeddings_with_pdf_importer.py --pdf mybook.pdf --loader langchain
-#   python embeddings_with_pdf_importer.py --text book_of_wonders.txt   -> the old behaviour
+#   python token_embeddings_with_pdf.py                      -> asks PDF or txt, then opens a file picker
+#   python token_embeddings_with_pdf.py --pdf                -> file picker straight away
+#   python token_embeddings_with_pdf.py --pdf mybook.pdf     -> use this PDF
+#   python token_embeddings_with_pdf.py --pdf mybook.pdf --pages 1-10
+#   python token_embeddings_with_pdf.py --pdf mybook.pdf --loader langchain
+#   python token_embeddings_with_pdf.py --text book_of_wonders.txt   -> the old behaviour
 #
 # Install:  pip install pypdf
 #           pip install langchain-community pypdf    (only if you want --loader langchain)

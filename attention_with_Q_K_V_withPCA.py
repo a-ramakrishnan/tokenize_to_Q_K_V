@@ -1,5 +1,6 @@
 # Ramakrishnan A
-# File 7 in the series on Building LLMs from scratch
+# File 7-C in the series on Building LLMs from scratch
+# Self-attention with trainable Q, K, V weights + optional PCA initialization (3D -> 2D)
 # Lots of pranams to Sebastian Raschka
 
 import torch.nn as nn

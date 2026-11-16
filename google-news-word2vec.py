@@ -1,5 +1,6 @@
 # Ramakrishnan A
-# File 5-B in the series on Building LLMs from scratch
+# File 5-C in the series on Building LLMs from scratch
+# Exploring semantic relationships in 300D Google News Word2Vec embeddings
 
 import gensim.downloader as api
 import numpy as np
