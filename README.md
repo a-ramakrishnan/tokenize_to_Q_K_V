@@ -1,4 +1,4 @@
-# From Tokenization to $Q, K, V$ Self-Attention (`tokenize_to_Q_K_V`)
+# From Tokenization to $Q, K, V$ Self-Attention & Training (`tokenize_to_Q_K_V_to_training`)
 
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B-ee4c2c.svg)
@@ -8,7 +8,7 @@
 
 ## About
 
-**`tokenize_to_Q_K_V`** is an educational, glass-box implementation of the foundational building blocks of a GPT-style Large Language Model (LLM) built from scratch in PyTorch.
+**`tokenize_to_Q_K_V_to_training`** is an educational, glass-box implementation of the foundational building blocks of a GPT-style Large Language Model (LLM) built from scratch in PyTorch.
 
 Most tutorials treat layers like `nn.Embedding`, `nn.Linear`, `softmax`, and `nn.Dropout` as black boxes. This repository opens up every single matrix multiplication between raw text and a complete causal self-attention head:
 
@@ -113,3 +113,16 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 9-A** | `causal_attention.py` | Introduces `CausalSelfAttention(nn.Module)` so each token can only attend to itself and earlier tokens. Walks through both the naive `torch.tril` + row renormalization method and the standard Transformer `-inf` `masked_fill` before `softmax` (using `register_buffer`), with a 4-panel visual pipeline and side-by-side Unmasked vs. Causal heatmap comparison. | `python causal_attention.py "the dog chased the cat because it was very hungry" --pca-init` |
 | **File 9-B** | `causal_attention_with_dropout.py` | Adds attention-weight dropout (`nn.Dropout(p)`) to form the complete `CausalAttention` class (supporting both 2D single sentences and 3D batches). Demonstrates PyTorch's inverted dropout $\frac{1}{1-p}$ rescaling, a 4-panel dropout decision & weight-shift visual pipeline, and `model.train()` vs. `model.eval()` comparison. | `python causal_attention_with_dropout.py "the dog chased the cat because it was very hungry" --dropout 0.5 --pca-init` |
+
+---
+
+## Roadmap: Towards Full Model Training
+
+- [x] **Stages 1–2**: Regex & BPE Tokenization, Sliding-Window DataLoaders, Token & Positional Embeddings, PDF Ingestion
+- [x] **Stages 3–4**: Unweighted Self-Attention & Scaled Trainable $Q, K, V$ Self-Attention with PCA Initialization
+- [x] **Stage 5**: Interactive Step-by-Step $Q, K, V$ Backpropagation & Adam Training Visualizers
+- [x] **Stage 6**: Causal (Masked) Self-Attention & Inverted Attention Dropout
+- [ ] **Stage 7**: Multi-Head Attention (`MultiHeadAttentionWrapper` stacking & batched weight-split `MultiHeadAttention`)
+- [ ] **Stage 8**: End-to-End Pipeline (`DataLoader` $\to$ `Token + Positional Embeddings` $\to$ `MultiHeadAttention`)
+- [ ] **Stage 9**: Transformer Block (`LayerNorm`, `GELU` Feed-Forward Network, Residual Connections) & GPT Training Loop
+
