@@ -66,3 +66,8 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 8-A** | `qkv_train_viz.py` | **Terminal UI visualizer**: Step through training (`[Enter]` for 1 step, `[N]` for $N$ steps, `[d]` to toggle $\Delta$ mode) and watch $W_Q, W_K, W_V$, $Q, K, V$, causal attention weights, and next-word probabilities update live in the terminal. | `python qkv_train_viz.py`<br>or<br>`python qkv_train_viz.py --sentence "the dog chased the ball across the quiet park"` |
 | **File 8-B** | `qkv_plot_viz.py` | **Matplotlib interactive dashboard**: Choose **Single-Word** or **Full-Sentence** loss scope at startup, then step through training with `[Space]`/`[Enter]`. Displays live heatmaps of $W_Q, W_K, W_V$, a plain-English breakdown of what the last gradient step changed, and (for short sentences) the exact chain-rule gradients $\frac{\partial L}{\partial W_Q}, \frac{\partial L}{\partial W_K}, \frac{\partial L}{\partial W_V}$ and Adam update arithmetic. | `python qkv_plot_viz.py`<br>or<br>`python qkv_plot_viz.py --sentence "dogs chase cats"` |
+
+### Stage 6: Causal (Masked) Self-Attention (`File 9-A`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 9-A** | `causal_attention.py` | Introduces `CausalSelfAttention(nn.Module)` so each token can only attend to itself and earlier tokens. Walks through both the naive `torch.tril` + row renormalization method and the standard Transformer `-inf` `masked_fill` before `softmax` (using `register_buffer`), with a 4-panel visual pipeline and side-by-side Unmasked vs. Causal heatmap comparison. | `python causal_attention.py "the dog chased the cat because it was very hungry" --pca-init` |
