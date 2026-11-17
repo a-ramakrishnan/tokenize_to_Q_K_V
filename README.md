@@ -34,6 +34,7 @@ flowchart LR
     H --> I["Stage 7: Multi-Head Attention<br/>Stacking (10-A) & Weight-Split (10-B)"]
     I --> J["Stage 8: End-to-End Bridge<br/>DataLoader → Embeddings → MHA (File 11)"]
     J --> K["Stage 9: Transformer & GPTModel<br/>Components (12-A) & Full GPT (12-B)"]
+    K --> L["Stage 10: Pretraining & Inference<br/>AdamW, Loss Curve, Top-k Sampling (File 13)"]
 ```
 
 ---
@@ -137,3 +138,8 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 12-A** | `transformer_components.py` | Implements and visualizes the three non-attention components of a GPT Transformer block: `LayerNorm` (verified against `nn.LayerNorm`), `GELU` activation (plotted vs. `ReLU`), `FeedForward` MLP ($4\times$ expansion & contraction), and a 5-layer residual shortcut gradient-flow comparison. | `python transformer_components.py --batch-size 2 --seq-len 5 --emb-dim 8` |
 | **File 12-B** | `gpt_model.py` | Assembles `MultiHeadAttention` (`File 10-B`) with `LayerNorm` and `FeedForward` (`File 12-A`) into `TransformerBlock` and the full `GPTModel` (with `GPT_CONFIG_MINI` and `GPT_CONFIG_124M` presets), plus greedy autoregressive next-token generation (`generate_text_simple`) and a top-$k$ probability bar chart. | `python gpt_model.py --prompt "Every effort moves you" --max-new-tokens 6 --preset mini` |
+
+### Stage 10: End-to-End Pretraining & Inference (`File 13`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 13** | `train_gpt.py` | Complete pretraining and inference pipeline: splits `book_of_wonders.txt` 90/10 into train/val `DataLoader`s, trains `GPTModel` (`File 12-B`) with `AdamW` and cross-entropy loss, tracks train/val loss & perplexity, plots the loss curve, and compares greedy vs. temperature + top-$k$ next-token sampling. | `python train_gpt.py --max-chars 40000 --epochs 5 --prompt "The wonders of"` |
