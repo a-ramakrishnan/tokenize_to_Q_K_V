@@ -32,7 +32,8 @@ flowchart LR
     F --> G["Stage 5: Live QKV Training<br/>Step-by-Step Backprop Visualizers (Files 8-A..8-B)"]
     F --> H["Stage 6: Causal Mask & Dropout<br/>AutoregressiveCausalAttention (Files 9-A..9-B)"]
     H --> I["Stage 7: Multi-Head Attention<br/>Stacking (10-A) & Weight-Split (10-B)"]
-    I --> K["Stage 9: Transformer Components<br/>LayerNorm, GELU, MLP, Residuals (12-A)"]
+    I --> J["Stage 8: End-to-End Bridge<br/>DataLoader → Embeddings → MHA (File 11)"]
+    J --> K["Stage 9: Transformer Components<br/>LayerNorm, GELU, MLP, Residuals (12-A)"]
 ```
 
 ---
@@ -125,6 +126,11 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 10-A** | `multi_head_attention_wrapper.py` | Introduces `MultiHeadAttentionWrapper(nn.Module)` by stacking `num_heads` independent `CausalAttention` modules in an `nn.ModuleList` and concatenating their outputs along `dim=-1`. Supports `--pca-init` with orthogonal PCA subspaces per head, side-by-side per-head attention heatmaps + divergence panel, a concatenation matrix diagram, and 3D batched inputs. | `python multi_head_attention_wrapper.py "the dog chased the cat because it was very hungry" --num-heads 2 --head-dim 2 --pca-init` |
 | **File 10-B** | `multi_head_attention.py` | Implements the production weight-split `MultiHeadAttention(nn.Module)` using unified `WQuery`, `WKey`, `WValue` projections reshaped via `.view(b, T, num_heads, head_dim)` and `.transpose(1, 2)` for parallel multi-head attention, followed by `out_proj` ($W_O$). Includes an `out_proj` mixing visualization and a numerical equivalence check proving it matches `MultiHeadAttentionWrapper` (`< 1e-5`) before $W_O$. | `python multi_head_attention.py "the dog chased the cat because it was very hungry" --num-heads 2 --d-out 4 --pca-init` |
+
+### Stage 8: End-to-End Input-to-Attention Bridge (`File 11`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 11** | `end_to_end_pipeline.py` | Connects the two halves of the repository: pulls real `(input, target)` token ID batches from `createDataLoader` (`File 3`) on `book_of_wonders.txt`, maps them through `Token + Positional Embeddings` (`File 5-A`), and feeds them into `MultiHeadAttention` (`File 10-B`). Visualizes the full tensor flow (`Token + Pos → Input → MHA Context`) and per-head attention heatmaps on real BPE tokens. | `python end_to_end_pipeline.py --batch-size 2 --max-length 8 --emb-dim 16 --num-heads 2` |
 
 ### Stage 9: Transformer Building Blocks (`File 12-A`)
 | Step | File | Description | How to Run |
