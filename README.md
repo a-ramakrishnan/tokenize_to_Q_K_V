@@ -33,6 +33,7 @@ flowchart LR
     F --> H["Stage 6: Causal Mask & Dropout<br/>AutoregressiveCausalAttention (Files 9-A..9-B)"]
     H --> I["Stage 7: Multi-Head Attention<br/>Stacking (10-A) & Weight-Split (10-B)"]
     I --> J["Stage 8: End-to-End Bridge<br/>DataLoader → Embeddings → MHA (File 11)"]
+    J --> K["Stage 9: Transformer Components<br/>LayerNorm, GELU, MLP, Residuals (12-A)"]
 ```
 
 ---
@@ -130,3 +131,8 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | Step | File | Description | How to Run |
 | :--- | :--- | :--- | :--- |
 | **File 11** | `end_to_end_pipeline.py` | Connects the two halves of the repository: pulls real `(input, target)` token ID batches from `createDataLoader` (`File 3`) on `book_of_wonders.txt`, maps them through `Token + Positional Embeddings` (`File 5-A`), and feeds them into `MultiHeadAttention` (`File 10-B`). Visualizes the full tensor flow (`Token + Pos → Input → MHA Context`) and per-head attention heatmaps on real BPE tokens. | `python end_to_end_pipeline.py --batch-size 2 --max-length 8 --emb-dim 16 --num-heads 2` |
+
+### Stage 9: Transformer Building Blocks (`File 12-A`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 12-A** | `transformer_components.py` | Implements and visualizes the three non-attention components of a GPT Transformer block: `LayerNorm` (verified against `nn.LayerNorm`), `GELU` activation (plotted vs. `ReLU`), `FeedForward` MLP ($4\times$ expansion & contraction), and a 5-layer residual shortcut gradient-flow comparison. | `python transformer_components.py --batch-size 2 --seq-len 5 --emb-dim 8` |
