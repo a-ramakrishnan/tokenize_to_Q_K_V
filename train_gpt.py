@@ -8,6 +8,7 @@
 import argparse
 import math
 import os
+import re
 import sys
 import time
 import tiktoken
@@ -27,8 +28,13 @@ def parse_args():
         description="End-to-end GPTModel pretraining on text + temperature/top-k "
                     "next-token inference."
     )
+    parser.add_argument("--pdf", type=str, default="",
+                        help="Optional path to a PDF file to train on. If omitted or not found, "
+                             "falls back to --text (book_of_wonders.txt).")
+    parser.add_argument("--pages", type=str, default="",
+                        help="Optional page range for --pdf (e.g. '1-10').")
     parser.add_argument("--text", type=str, default=os.path.join(SCRIPT_DIR, "book_of_wonders.txt"),
-                        help="Path to the training .txt file (default: book_of_wonders.txt).")
+                        help="Path to the fallback .txt file (default: book_of_wonders.txt).")
     parser.add_argument("--max-chars", type=int, default=40000,
                         help="Number of characters to use for fast CPU training demo "
                              "(0 = use entire file; default: 40000).")
@@ -50,6 +56,8 @@ def parse_args():
                         help="Sampling temperature (>0 for stochastic, 0.0 for greedy; default: 0.8).")
     parser.add_argument("--top-k", type=int, default=25,
                         help="Top-k sampling cutoff (0 disables top-k; default: 25).")
+    parser.add_argument("--trace-steps", type=int, default=5,
+                        help="Number of next-token prediction steps to visualize in detail (default: 5).")
     parser.add_argument("--save-checkpoint", type=str, default="",
                         help="Optional path to save trained model weights (.pt).")
     parser.add_argument("--no-tui", action="store_true",
@@ -397,13 +405,192 @@ def plot_losses(epochs_seen, tokens_seen, train_losses, val_losses,
     plt.close(fig)
 
 
+def plot_prediction_walkthrough(trace_steps, prompt, figsize=(13, 2.4), save_path=None, show=True):
+    """
+    Matplotlib graphic showing step-by-step how autoregressive next-token
+    prediction works: each row is one generated token, showing the context
+    so far and the top-6 candidate probabilities with the chosen token in green.
+    """
+    if not trace_steps:
+        return
+    n_steps = len(trace_steps)
+    fig, axes = plt.subplots(n_steps, 1, figsize=(figsize[0], figsize[1] * n_steps))
+    if n_steps == 1:
+        axes = [axes]
+
+    for step_idx, step in enumerate(trace_steps):
+        ax = axes[step_idx]
+        cands = step["candidates"]
+        labels = [c[0] for c in cands][::-1]
+        probs = [c[2] * 100.0 for c in cands][::-1]
+        colors = ["#2f9e44" if c[3] else "#4c6ef5" for c in cands][::-1]
+
+        bars = ax.barh(range(len(labels)), probs, color=colors)
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(labels, fontsize=8.5)
+        ax.set_xlim(0, max(max(probs) * 1.25, 1.0))
+        ax.set_xlabel("Probability (%)" if step_idx == n_steps - 1 else "")
+        ctx_preview = step["context_text"].replace("\n", "\\n")
+        if len(ctx_preview) > 55:
+            ctx_preview = "..." + ctx_preview[-52:]
+        ax.set_title(
+            f"Step {step_idx + 1}: Context {repr(ctx_preview)}  →  Picked {step['chosen_str']} ({step['chosen_prob'] * 100:.2f}%)",
+            fontsize=9.5, loc="left", fontweight="bold"
+        )
+        for bar, p in zip(bars, probs):
+            ax.text(p, bar.get_y() + bar.get_height() / 2, f" {p:.2f}%",
+                    va="center", ha="left", fontsize=8)
+
+    plt.suptitle(f"How Autoregressive Next-Token Prediction Happens (Prompt: {repr(prompt)})",
+                 fontsize=12, fontweight="bold")
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def generate_with_visual_trace(model, tokenizer, device, prompt, context_size,
+                               steps=5, temperature=0.8, top_k=25):
+    """
+    Run `steps` autoregressive prediction steps, printing a step-by-step
+    command-line graphic of:
+      Context IDs -> GPTModel Logits (50,257) -> Top-k & Temperature -> Softmax -> Picked Token
+    Returns the trace list for optional Matplotlib plotting.
+    """
+    model.eval()
+    idx = text_to_token_ids(prompt, tokenizer).to(device)
+    trace = []
+
+    print("\n" + BOLD + CYAN + "=" * 78 + RESET)
+    print(BOLD + CYAN + "  HOW NEXT-TOKEN PREDICTION ACTUALLY HAPPENS (STEP-BY-STEP TRACE)" + RESET)
+    print(BOLD + CYAN + "=" * 78 + RESET)
+    mode_desc = "Greedy (argmax)" if temperature == 0.0 else f"Stochastic (temp={temperature}, top_k={top_k})"
+    print(f"  Prompt: {repr(prompt)}  |  Decoding: {mode_desc}\n")
+
+    for step_idx in range(steps):
+        idx_cond = idx[:, -context_size:]
+        with torch.no_grad():
+            logits = model(idx_cond)[:, -1, :]  # (1, vocab_size)
+
+        raw_logits = logits.clone()
+        filtered_logits = logits.clone()
+        if top_k is not None and top_k > 0:
+            top_vals, _ = torch.topk(filtered_logits, top_k)
+            min_val = top_vals[:, -1].unsqueeze(-1)
+            filtered_logits = torch.where(
+                filtered_logits < min_val,
+                torch.tensor(float("-inf"), device=logits.device),
+                filtered_logits,
+            )
+
+        if temperature > 0.0:
+            scaled_logits = filtered_logits / temperature
+            probs = torch.softmax(scaled_logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+        else:
+            probs = torch.softmax(filtered_logits, dim=-1)
+            idx_next = torch.argmax(probs, dim=-1, keepdim=True)
+
+        chosen_id = int(idx_next.item())
+        chosen_str = repr(tokenizer.decode([chosen_id]))
+        chosen_prob = float(probs[0, chosen_id].item())
+
+        # Collect top-6 candidates for the graphic (plus the picked token if outside top-6)
+        top6_p, top6_ids = torch.topk(probs[0], 6)
+        top6_id_set = set(int(t.item()) for t in top6_ids)
+        display_ids = list(top6_ids)
+        if chosen_id not in top6_id_set:
+            display_ids.append(torch.tensor(chosen_id, device=logits.device))
+
+        candidates = []
+        for tid in display_ids:
+            t_int = int(tid.item())
+            candidates.append((
+                repr(tokenizer.decode([t_int])),
+                float(raw_logits[0, t_int].item()),
+                float(probs[0, t_int].item()),
+                t_int == chosen_id,
+            ))
+
+        ctx_tokens = [repr(tokenizer.decode([int(t)])) for t in idx_cond[0].tolist()[-6:]]
+        ctx_text = token_ids_to_text(idx, tokenizer)
+
+        # Print CLI graphic for this step
+        print(f"  {BOLD}┌─ Step {step_idx + 1}/{steps} ──────────────────────────────────────────────────────────{RESET}")
+        print(f"  {BOLD}│{RESET} Context window (last {len(idx_cond[0])} tokens): {' '.join(ctx_tokens)}")
+        print(f"  {BOLD}│{RESET} Forward pass: GPTModel -> logits shape (1, 50257) -> Top-k & Softmax:")
+        max_p = max(max(c[2] for c in candidates), 1e-6)
+        for tok_s, raw_l, p_val, is_picked in candidates:
+            bar_w = int(round((p_val / max_p) * 20))
+            marker = f"{GREEN}◀ PICKED{RESET}" if is_picked else ""
+            col = GREEN if is_picked else CYAN
+            print(f"  {BOLD}│{RESET}   {tok_s:<14} logit {raw_l:+6.2f} │ {col}{'█' * bar_w}{DIM}{'░' * (20 - bar_w)}{RESET} {p_val * 100:5.2f}% {marker}")
+        print(f"  {BOLD}└─▶ Appended {GREEN}{chosen_str}{RESET} (new text: {repr(ctx_text + tokenizer.decode([chosen_id]))})\n")
+
+        trace.append({
+            "context_text": ctx_text,
+            "candidates": candidates,
+            "chosen_str": chosen_str,
+            "chosen_prob": chosen_prob,
+        })
+        idx = torch.cat((idx, idx_next), dim=1)
+
+    return trace
+
+
+def _extract_pdf_text(pdf_path, page_spec=""):
+    """Extract and clean text from a PDF using pypdf, with optional page range (e.g. '1-10')."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(pdf_path)
+    total = len(reader.pages)
+    if page_spec:
+        indices = []
+        for part in page_spec.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                s, e = part.split("-", 1)
+                s_i = int(s) if s.strip() else 1
+                e_i = int(e) if e.strip() else total
+                indices.extend(range(s_i - 1, e_i))
+            else:
+                indices.append(int(part) - 1)
+        indices = [i for i in indices if 0 <= i < total]
+    else:
+        indices = list(range(total))
+
+    raw = "\n\n".join((reader.pages[i].extract_text() or "") for i in indices)
+    raw = raw.replace("\u00ad", "")
+    raw = re.sub(r"(\w)-\n(\w)", r"\1\2", raw)
+    raw = re.sub(r"[ \t]+", " ", raw)
+    raw = re.sub(r" *\n *", "\n", raw)
+    raw = re.sub(r"(?<!\n)\n(?!\n)", " ", raw)
+    raw = re.sub(r"\n{3,}", "\n\n", raw)
+    return raw.strip(), len(indices), total
+
+
 if __name__ == "__main__":
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = tiktoken.get_encoding("gpt2")
 
-    with open(args.text, "r", encoding="utf-8") as f:
-        raw_text = f.read()
+    raw_text = None
+    source_label = os.path.basename(args.text)
+    if args.pdf:
+        if os.path.isfile(args.pdf):
+            raw_text, _pages_used, _total_pages = _extract_pdf_text(args.pdf, args.pages)
+            source_label = f"{os.path.basename(args.pdf)} (pages {_pages_used}/{_total_pages})"
+        else:
+            print(f"[Notice] PDF not found at {args.pdf!r} -- falling back to {args.text}")
+
+    if raw_text is None:
+        with open(args.text, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+
     if args.max_chars > 0:
         raw_text = raw_text[:args.max_chars]
 
@@ -430,7 +617,7 @@ if __name__ == "__main__":
         shuffle=False,
         drop_last=False,
     )
-    print(f"Text source    : {os.path.basename(args.text)} ({len(raw_text):,} chars)")
+    print(f"Text source    : {source_label} ({len(raw_text):,} chars)")
     print(f"Train batches  : {len(train_loader)}  |  Val batches: {len(val_loader)}")
     print(f"Device         : {device}\n")
 
@@ -497,6 +684,17 @@ if __name__ == "__main__":
         context_size=args.context_length, temperature=args.temperature, top_k=args.top_k,
     )
     print(f"Sampled (temp={args.temperature}, top_k={args.top_k}): {repr(token_ids_to_text(sampled_ids, tokenizer))}")
+
+    torch.manual_seed(42)
+    trace = generate_with_visual_trace(
+        model, tokenizer, device,
+        prompt=args.prompt,
+        context_size=args.context_length,
+        steps=args.trace_steps,
+        temperature=args.temperature,
+        top_k=args.top_k,
+    )
+    plot_prediction_walkthrough(trace, args.prompt)
 
     if args.save_checkpoint:
         torch.save(model.state_dict(), args.save_checkpoint)
