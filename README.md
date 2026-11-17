@@ -31,6 +31,7 @@ flowchart LR
     E --> F["Stage 4: Trainable Q, K, V<br/>Scaled Dot-Product & PCA Init (Files 7-A..7-D)"]
     F --> G["Stage 5: Live QKV Training<br/>Step-by-Step Backprop Visualizers (Files 8-A..8-B)"]
     F --> H["Stage 6: Causal Mask & Dropout<br/>AutoregressiveCausalAttention (Files 9-A..9-B)"]
+    H --> I["Stage 7: Multi-Head Attention<br/>Stacking Wrapper (File 10-A)"]
 ```
 
 ---
@@ -48,6 +49,8 @@ flowchart LR
    $$S_{ij}^{\text{causal}} = \begin{cases} \dfrac{q_i \cdot k_j}{\sqrt{d_k}} & \text{if } j \le i \\ -\infty & \text{if } j > i \text{ (future token)} \end{cases}, \quad A = \text{softmax}(S^{\text{causal}})$$
 5. **Causal Self-Attention With Inverted Dropout (`File 9-B`)**:
    $$\tilde{A}_{ij} = \begin{cases} 0 & \text{with probability } p \\ \dfrac{A_{ij}}{1 - p} & \text{with probability } 1 - p \end{cases}, \quad Z = \tilde{A} V$$
+6. **Multi-Head Attention via Stacking (`File 10-A`)**:
+   $$\text{MHA}_{\text{wrapper}}(X) = \text{Concat}\big(\text{head}_1(X),\, \text{head}_2(X),\, \dots,\, \text{head}_h(X)\big) \in \mathbb{R}^{T \times (h \cdot d_{\text{out}})}$$
 
 ---
 
@@ -113,3 +116,8 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 9-A** | `causal_attention.py` | Introduces `CausalSelfAttention(nn.Module)` so each token can only attend to itself and earlier tokens. Walks through both the naive `torch.tril` + row renormalization method and the standard Transformer `-inf` `masked_fill` before `softmax` (using `register_buffer`), with a 4-panel visual pipeline and side-by-side Unmasked vs. Causal heatmap comparison. | `python causal_attention.py "the dog chased the cat because it was very hungry" --pca-init` |
 | **File 9-B** | `causal_attention_with_dropout.py` | Adds attention-weight dropout (`nn.Dropout(p)`) to form the complete `CausalAttention` class (supporting both 2D single sentences and 3D batches). Demonstrates PyTorch's inverted dropout $\frac{1}{1-p}$ rescaling, a 4-panel dropout decision & weight-shift visual pipeline, and `model.train()` vs. `model.eval()` comparison. | `python causal_attention_with_dropout.py "the dog chased the cat because it was very hungry" --dropout 0.5 --pca-init` |
+
+### Stage 7: Multi-Head Attention (`File 10-A`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 10-A** | `multi_head_attention_wrapper.py` | Introduces `MultiHeadAttentionWrapper(nn.Module)` by stacking `num_heads` independent `CausalAttention` modules in an `nn.ModuleList` and concatenating their outputs along `dim=-1`. Supports `--pca-init` with orthogonal PCA subspaces per head, side-by-side per-head attention heatmaps + divergence panel, a concatenation matrix diagram, and 3D batched inputs. | `python multi_head_attention_wrapper.py "the dog chased the cat because it was very hungry" --num-heads 2 --head-dim 2 --pca-init` |
