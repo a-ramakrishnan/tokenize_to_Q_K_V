@@ -38,6 +38,7 @@ flowchart LR
     I --> J["Stage 8: End-to-End Bridge<br/>DataLoader → Embeddings → MHA (File 11)"]
     J --> K["Stage 9: Transformer & GPTModel<br/>Components (12-A) & Full GPT (12-B)"]
     K --> L["Stage 10: Pretraining & Inference<br/>AdamW, Loss Curve, Top-k Sampling (File 13)"]
+    L --> M["Stage 11: KV Cache Inference<br/>Prefill & Decode Walkthrough (File 14)"]
 ```
 
 ---
@@ -145,4 +146,9 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 ### Stage 10: End-to-End Pretraining & Inference (`File 13`)
 | Step | File | Description | How to Run |
 | :--- | :--- | :--- | :--- |
-| **File 13** | `train_gpt.py` | Complete pretraining and inference pipeline: splits `book_of_wonders.txt` 90/10 into train/val `DataLoader`s, trains `GPTModel` (`File 12-B`) with `AdamW` and cross-entropy loss, tracks train/val loss & perplexity, plots the loss curve, and compares greedy vs. temperature + top-$k$ next-token sampling. | `python train_gpt.py --max-chars 40000 --epochs 5 --prompt "The wonders of"` |
+| **File 13** | `train_gpt.py` | Complete pretraining and inference pipeline: trains `GPTModel` (`File 12-B`) on a `--pdf` (with automatic fallback to `book_of_wonders.txt`) using `AdamW` and cross-entropy loss. Features a live ANSI CLI training dashboard (sparkline, gradient-flow bars, throughput), loss curve plot, `--predict-words` control, and a step-by-step next-token prediction graphic. | `python train_gpt.py --pdf mybook.pdf --pages 1-10 --prompt "Attention is" --predict-words 5` |
+
+### Stage 11: KV Cache Inference — Prefill & Decode (`File 14`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 14** | `kv_cache_inference.py` | Visualizes how Key ($K$) and Value ($V$) caches are populated in 1 parallel **Prefill** pass and grown 1 token at a time during **Decode** (`MultiHeadAttentionWithCache` + `GPTModelWithCache`). Prints a full matrix-shapes blueprint (`Embeddings → Q, K, V → Attn Scores → Softmax → Logits`), traces every Decode step's cache append and top-3 predictions, verifies exact equivalence (`torch.equal`) with uncached decoding, and benchmarks wall-clock speedup. | `python kv_cache_inference.py --max-new-tokens 12 --detail-steps 5` |
