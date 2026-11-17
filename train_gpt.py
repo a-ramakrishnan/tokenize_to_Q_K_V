@@ -52,6 +52,9 @@ def parse_args():
                         help="Prompt for before/after training inference comparison.")
     parser.add_argument("--max-new-tokens", type=int, default=20,
                         help="Number of tokens to generate during inference (default: 20).")
+    parser.add_argument("--predict-words", "--words", type=int, default=0, dest="predict_words",
+                        help="Number of words to predict after the prompt (when > 0, overrides "
+                             "--max-new-tokens and --trace-steps to generate that many words).")
     parser.add_argument("--temperature", type=float, default=0.8,
                         help="Sampling temperature (>0 for stochastic, 0.0 for greedy; default: 0.8).")
     parser.add_argument("--top-k", type=int, default=25,
@@ -110,16 +113,33 @@ def evaluate_model(model, train_loader, val_loader, device, eval_iter):
     return train_loss, val_loss
 
 
+def _should_stop_word_gen(generated_ids, tokenizer, predict_words):
+    """Return True once at least `predict_words` words have been generated and the last token ends a word."""
+    if not generated_ids:
+        return False
+    text = tokenizer.decode(generated_ids)
+    words = text.split()
+    if len(words) < predict_words:
+        return False
+    last_tok = tokenizer.decode([generated_ids[-1]])
+    return len(words) > predict_words or last_tok.endswith((" ", "\n", ".", ",", "!", "?", ";", ":"))
+
+
 def generate(model, idx, max_new_tokens, context_size,
-             temperature=0.0, top_k=None, eos_id=None):
+             temperature=0.0, top_k=None, eos_id=None,
+             tokenizer=None, predict_words=0):
     """
     Autoregressive decoding with optional top-k filtering and temperature
     scaling (Ch 5.3):
       - temperature == 0.0 -> deterministic greedy argmax decoding
       - temperature > 0.0  -> scales logits by 1/temperature and samples via
                               torch.multinomial (optionally restricted to top_k)
+      - predict_words > 0  -> stops once `predict_words` words have been generated
     """
-    for _ in range(max_new_tokens):
+    step_limit = max(predict_words * 4, 20) if (predict_words > 0 and tokenizer is not None) else max_new_tokens
+    prompt_len = idx.shape[1]
+
+    for _ in range(step_limit):
         idx_cond = idx[:, -context_size:]
         with torch.no_grad():
             logits = model(idx_cond)
@@ -145,6 +165,11 @@ def generate(model, idx, max_new_tokens, context_size,
             break
 
         idx = torch.cat((idx, idx_next), dim=1)
+
+        if predict_words > 0 and tokenizer is not None:
+            new_ids = idx[0, prompt_len:].tolist()
+            if _should_stop_word_gen(new_ids, tokenizer, predict_words):
+                break
 
     return idx
 
@@ -452,24 +477,27 @@ def plot_prediction_walkthrough(trace_steps, prompt, figsize=(13, 2.4), save_pat
 
 
 def generate_with_visual_trace(model, tokenizer, device, prompt, context_size,
-                               steps=5, temperature=0.8, top_k=25):
+                               steps=5, temperature=0.8, top_k=25, predict_words=0):
     """
-    Run `steps` autoregressive prediction steps, printing a step-by-step
-    command-line graphic of:
+    Run `steps` autoregressive prediction steps (or until `predict_words` words
+    are generated), printing a step-by-step command-line graphic of:
       Context IDs -> GPTModel Logits (50,257) -> Top-k & Temperature -> Softmax -> Picked Token
     Returns the trace list for optional Matplotlib plotting.
     """
     model.eval()
     idx = text_to_token_ids(prompt, tokenizer).to(device)
+    prompt_len = idx.shape[1]
+    step_limit = max(predict_words * 4, 20) if predict_words > 0 else steps
     trace = []
 
     print("\n" + BOLD + CYAN + "=" * 78 + RESET)
     print(BOLD + CYAN + "  HOW NEXT-TOKEN PREDICTION ACTUALLY HAPPENS (STEP-BY-STEP TRACE)" + RESET)
     print(BOLD + CYAN + "=" * 78 + RESET)
     mode_desc = "Greedy (argmax)" if temperature == 0.0 else f"Stochastic (temp={temperature}, top_k={top_k})"
-    print(f"  Prompt: {repr(prompt)}  |  Decoding: {mode_desc}\n")
+    target_desc = f"{predict_words} words" if predict_words > 0 else f"{steps} tokens"
+    print(f"  Prompt: {repr(prompt)}  |  Target: {target_desc}  |  Decoding: {mode_desc}\n")
 
-    for step_idx in range(steps):
+    for step_idx in range(step_limit):
         idx_cond = idx[:, -context_size:]
         with torch.no_grad():
             logits = model(idx_cond)[:, -1, :]  # (1, vocab_size)
@@ -518,7 +546,8 @@ def generate_with_visual_trace(model, tokenizer, device, prompt, context_size,
         ctx_text = token_ids_to_text(idx, tokenizer)
 
         # Print CLI graphic for this step
-        print(f"  {BOLD}┌─ Step {step_idx + 1}/{steps} ──────────────────────────────────────────────────────────{RESET}")
+        step_label = f"Step {step_idx + 1}" if predict_words > 0 else f"Step {step_idx + 1}/{steps}"
+        print(f"  {BOLD}┌─ {step_label} ──────────────────────────────────────────────────────────{RESET}")
         print(f"  {BOLD}│{RESET} Context window (last {len(idx_cond[0])} tokens): {' '.join(ctx_tokens)}")
         print(f"  {BOLD}│{RESET} Forward pass: GPTModel -> logits shape (1, 50257) -> Top-k & Softmax:")
         max_p = max(max(c[2] for c in candidates), 1e-6)
@@ -536,6 +565,11 @@ def generate_with_visual_trace(model, tokenizer, device, prompt, context_size,
             "chosen_prob": chosen_prob,
         })
         idx = torch.cat((idx, idx_next), dim=1)
+
+        if predict_words > 0:
+            new_ids = idx[0, prompt_len:].tolist()
+            if _should_stop_word_gen(new_ids, tokenizer, predict_words):
+                break
 
     return trace
 
@@ -675,6 +709,7 @@ if __name__ == "__main__":
     greedy_ids = generate(
         model, prompt_ids, max_new_tokens=args.max_new_tokens,
         context_size=args.context_length, temperature=0.0,
+        tokenizer=tokenizer, predict_words=args.predict_words,
     )
     print(f"Greedy (temp=0.0)             : {repr(token_ids_to_text(greedy_ids, tokenizer))}")
 
@@ -682,6 +717,7 @@ if __name__ == "__main__":
     sampled_ids = generate(
         model, prompt_ids, max_new_tokens=args.max_new_tokens,
         context_size=args.context_length, temperature=args.temperature, top_k=args.top_k,
+        tokenizer=tokenizer, predict_words=args.predict_words,
     )
     print(f"Sampled (temp={args.temperature}, top_k={args.top_k}): {repr(token_ids_to_text(sampled_ids, tokenizer))}")
 
@@ -693,6 +729,7 @@ if __name__ == "__main__":
         steps=args.trace_steps,
         temperature=args.temperature,
         top_k=args.top_k,
+        predict_words=args.predict_words,
     )
     plot_prediction_walkthrough(trace, args.prompt)
 
