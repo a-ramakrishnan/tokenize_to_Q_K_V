@@ -18,6 +18,9 @@ Most tutorials treat layers like `nn.Embedding`, `nn.Linear`, `softmax`, and `nn
 
 *Inspired by and built alongside Sebastian Raschka's **Build a Large Language Model (From Scratch)**.*
 
+> [!NOTE]
+> **Educational Scope & Output Quality**: This exercise is purely for **learning how LLM tokenization, attention, and training work under the hood**. Because the training dataset (`book_of_wonders.txt` or a short PDF) and model size are intentionally very small so everything runs in seconds on a CPU, the generated text will **not** produce fluent or high-quality outputs.
+
 ---
 
 ## End-to-End Pipeline Covered in This Repo
