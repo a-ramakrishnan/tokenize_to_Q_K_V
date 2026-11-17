@@ -32,6 +32,7 @@ flowchart LR
     F --> G["Stage 5: Live QKV Training<br/>Step-by-Step Backprop Visualizers (Files 8-A..8-B)"]
     F --> H["Stage 6: Causal Mask & Dropout<br/>AutoregressiveCausalAttention (Files 9-A..9-B)"]
     H --> I["Stage 7: Multi-Head Attention<br/>Stacking (10-A) & Weight-Split (10-B)"]
+    I --> K["Stage 9: Transformer Components<br/>LayerNorm, GELU, MLP, Residuals (12-A)"]
 ```
 
 ---
@@ -124,3 +125,8 @@ Watch $W_Q, W_K, W_V$ learn step-by-step during backpropagation on a causal next
 | :--- | :--- | :--- | :--- |
 | **File 10-A** | `multi_head_attention_wrapper.py` | Introduces `MultiHeadAttentionWrapper(nn.Module)` by stacking `num_heads` independent `CausalAttention` modules in an `nn.ModuleList` and concatenating their outputs along `dim=-1`. Supports `--pca-init` with orthogonal PCA subspaces per head, side-by-side per-head attention heatmaps + divergence panel, a concatenation matrix diagram, and 3D batched inputs. | `python multi_head_attention_wrapper.py "the dog chased the cat because it was very hungry" --num-heads 2 --head-dim 2 --pca-init` |
 | **File 10-B** | `multi_head_attention.py` | Implements the production weight-split `MultiHeadAttention(nn.Module)` using unified `WQuery`, `WKey`, `WValue` projections reshaped via `.view(b, T, num_heads, head_dim)` and `.transpose(1, 2)` for parallel multi-head attention, followed by `out_proj` ($W_O$). Includes an `out_proj` mixing visualization and a numerical equivalence check proving it matches `MultiHeadAttentionWrapper` (`< 1e-5`) before $W_O$. | `python multi_head_attention.py "the dog chased the cat because it was very hungry" --num-heads 2 --d-out 4 --pca-init` |
+
+### Stage 9: Transformer Building Blocks (`File 12-A`)
+| Step | File | Description | How to Run |
+| :--- | :--- | :--- | :--- |
+| **File 12-A** | `transformer_components.py` | Implements and visualizes the three non-attention components of a GPT Transformer block: `LayerNorm` (verified against `nn.LayerNorm`), `GELU` activation (plotted vs. `ReLU`), `FeedForward` MLP ($4\times$ expansion & contraction), and a 5-layer residual shortcut gradient-flow comparison. | `python transformer_components.py --batch-size 2 --seq-len 5 --emb-dim 8` |
